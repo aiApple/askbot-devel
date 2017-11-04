@@ -60,3 +60,5 @@ htmlcov
 node_modules
 bower_components/
 .tox
+/testproject/db.data
+/testproject/testproject/static
