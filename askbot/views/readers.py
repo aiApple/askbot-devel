@@ -69,6 +69,8 @@ def index(request):#generates front page - shows listing of questions sorted in 
     """
     return HttpResponseRedirect(reverse('questions'))
 
+#①request=<WSGIRequest: GET '/questions/'>,
+#①kwargs={u'sort': None, u'author': None, u'tags': None, u'page_size': None, u'scope': None, u'query': None, u'page': None}
 def questions(request, **kwargs):
     """
     List of Questions, Tagged questions, and Unanswered questions.
@@ -78,17 +80,23 @@ def questions(request, **kwargs):
     if request.method != 'GET':
         return HttpResponseNotAllowed(['GET'])
 
+    #①request.user.is_authenticated()=False
     search_state = SearchState(
                     user_logged_in=request.user.is_authenticated(),
                     **kwargs
                 )
 
+    #①request.user=AnonymousUser: AnonymousUser,
+    #①search_state=scope:all/sort:activity-desc/page:1/
     qs, meta_data = models.Thread.objects.run_advanced_search(
                         request_user=request.user, search_state=search_state
                     )
+
+    #meta_data={'non_existing_tags': []}
     if meta_data['non_existing_tags']:
         search_state = search_state.remove_tags(meta_data['non_existing_tags'])
 
+    #①qs=[]，search_state.page_size=30
     paginator = Paginator(qs, search_state.page_size)
     if paginator.num_pages < search_state.page:
         search_state.page = 1
@@ -97,6 +105,7 @@ def questions(request, **kwargs):
 
     # INFO: Because for the time being we need question posts and thread authors
     #       down the pipeline, we have to precache them in thread objects
+    #①page.object_list=[]
     models.Thread.objects.precache_view_data_hack(threads=page.object_list)
 
     related_tags = Tag.objects.get_related_to_search(
@@ -104,6 +113,7 @@ def questions(request, **kwargs):
                         ignored_tag_names=meta_data.get('ignored_tag_names',[])
                     )
     tag_list_type = askbot_settings.TAG_LIST_FORMAT
+    #①tag_list_type=u'list'
     if tag_list_type == 'cloud': #force cloud to sort by name
         related_tags = sorted(related_tags, key = operator.attrgetter('name'))
 
@@ -127,23 +137,27 @@ def questions(request, **kwargs):
 
     #get url for the rss feed
     context_feed_url = reverse('latest_questions_feed')
+    #①context_feed_url=u'/feeds/rss/'
     # We need to pass the rss feed url based
     # on the search state to the template.
     # We use QueryDict to get a querystring
     # from dicts and arrays. Much cleaner
     # than parsing and string formating.
     rss_query_dict = QueryDict("").copy()
+    #①search_state.query=None
     if search_state.query:
         # We have search string in session - pass it to
         # the QueryDict
         rss_query_dict.update({"q": search_state.query})
 
+    #①search_state.tags=None
     if search_state.tags:
         # We have tags in session - pass it to the
         # QueryDict but as a list - we want tags+
         rss_query_dict.setlist('tags', search_state.tags)
         context_feed_url += '?' + rss_query_dict.urlencode()
 
+    #如果filter参数值为None，list参数中所有为假的元素都将被删除
     reset_method_count = len(filter(None, [search_state.query, search_state.tags, meta_data.get('author_name', None)]))
 
     if request.is_ajax():
@@ -283,7 +297,7 @@ def questions(request, **kwargs):
                     'and set the base url for your site to function properly'
                 ) % url
                 request.user.message_set.create(message=msg)
-
+        #①template_data={'contributors': [], 'ignored_tag_names': None, 'author_name': None, 'language_code': 'en', 'active_tab': 'questions', 'query': None, 'tag_list_type': u'list', 'display_tag_filter_strategy_choices': ((0, <django.utils.functional.__proxy__ object at 0x00000000059CDF28>), (1, <django.utils.functional.__proxy__ object at 0x00000000059CDF98>), (2, <django.utils.functional.__proxy__ object at 0x00000000059D5048>)), 'is_unanswered': False, 'feed_url': u'/feeds/rss/', 'questions_count': 0, 'tags': [], 'page_size': 30, 'search_state': <askbot.search.state_manager.SearchState object at 0x0000000006D9ECC0>, 'tab_id': 'activity-desc', 'sort': 'activity-desc', 'context': {'page_object': <Page 1 of 1>, 'base_url': u'scope:all/sort:activity-desc/page:1/', 'page_size': 30, 'current_page_number': 1, 'is_paginated': False, 'pages': 1}, 'search_tags': [], 'reset_method_count': 0, 'subscribed_tag_names': None, 'threads': <Page 1 of 1>, 'scope': u'all', 'font_size': {}, 'email_tag_filter_strategy_choices': ((0, <django.utils.functional.__proxy__ object at 0x00000000059D5128>), (1, <django.utils.functional.__proxy__ object at 0x00000000059D5198>), (2, <django.utils.functional.__proxy__ object at 0x00000000059D5208>)), 'show_sort_by_relevance': False, 'tag_editor_settings': '{"tag_forbidden_first_chars": "#", "max_tag_length": 20, "force_lowercase_tags": false, "max_tags_per_post": 5, "messages": {"wrong_first_char": "# is not a valid character at the beginning of tags, use only letters and numbers", "wrong_chars": "please use letters, numbers and characters \\"-+.#\\"", "required": "tags are required"}, "tags_are_required": false}', 'page_class': 'main-page', 'query_string': u'scope:all/sort:activity-desc/page:1/', 'name_of_anonymous_user': u'Anonymous', 'interesting_tag_names': None}
         return render(request, 'main_page.html', template_data)
         #print timezone.now() - before
         #return res
